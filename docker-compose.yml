@@ -1,0 +1,64 @@
+# Website on CPU:        docker compose up --build web
+# Website on GPU:        docker compose --profile gpu up --build web-gpu
+# Training on GPU:       docker compose --profile train run --rm train
+#   (extra args:         docker compose --profile train run --rm train python train.py --epochs 50 ...)
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  web:
+    build: .
+    image: iqa:cpu
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+    environment:
+      - MODEL_PATH=/app/checkpoints/bestnatmodel.pth
+    restart: unless-stopped
+
+  web-gpu:
+    profiles: ["gpu"]
+    build:
+      context: .
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128
+    image: iqa:gpu
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./checkpoints:/app/checkpoints:ro
+    environment:
+      - MODEL_PATH=/app/checkpoints/bestnatmodel.pth
+    restart: unless-stopped
+    <<: *gpu
+
+  train:
+    profiles: ["train"]
+    image: iqa:gpu
+    build:
+      context: .
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cu128
+    shm_size: "8gb"          # DataLoader workers need shared memory
+    volumes:
+      - ./data:/app/data:ro
+      - ./checkpoints:/app/checkpoints
+      - model-cache:/root/.cache   # ImageNet / Swin pretrained weights, downloaded once
+    command: >
+      python train.py
+        --images /app/data/images
+        --csv /app/data/labels.csv
+        --out /app/checkpoints/bestnatmodel.pth
+        --score-min 1 --score-max 5
+    <<: *gpu
+
+volumes:
+  model-cache:

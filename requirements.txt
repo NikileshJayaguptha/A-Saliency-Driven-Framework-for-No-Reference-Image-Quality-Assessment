@@ -1,0 +1,10 @@
+# torch / torchvision are installed separately (CPU or CUDA build), see README / Dockerfile
+timm>=1.0
+pandas
+scipy
+numpy
+pillow
+tqdm
+fastapi
+uvicorn[standard]
+python-multipart
